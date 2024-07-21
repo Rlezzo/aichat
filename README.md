@@ -36,6 +36,7 @@
 ## 配置参数
 程序会自动生成4个json文件
 - options.json
+推荐先修改`config_manager.py`中的`_create_default_options`方法，以便生成的默认配置的api可直接用
 ```
 {
   "api_providers": {
