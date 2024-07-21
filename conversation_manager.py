@@ -64,7 +64,6 @@ class ConversationManager:
         if not record:
             return
         messages = self.get_messages(group_id)
-        messages.append({"role": role, "content": content})
         
         # 清理过多的消息
         if len(messages) > self.max_messages:
