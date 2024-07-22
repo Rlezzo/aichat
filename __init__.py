@@ -86,6 +86,7 @@ async def get_chat_response(group_id, text, config):
         reply = response.choices[0].message.content.strip()
         if record:
             # 开启记忆就保存一对对话
+            messages.pop() # 避免重复添加用户消息
             conversation_manager.add_message(group_id, "user", text)
             conversation_manager.add_message(group_id, "assistant", reply)
         return reply
