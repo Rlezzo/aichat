@@ -5,6 +5,7 @@ from nonebot.message import Message
 from .conversation_manager import ConversationManager
 from .config_manager import ConfigManager
 from .client_manager import ClientManager
+import datetime
 
 help_text = """1. `添加人格/设置人格+人格名+空格+设定`: 创建新人格或修改现有人格，注意人格名不能大于24位
 2. `人格列表`: 获取当前所有人格及当前人格
@@ -28,6 +29,9 @@ config_manager = ConfigManager()
 client_manager = ClientManager()
 
 black_word = ['今天我是什么少女', 'ba来一井']  # 如果有不想触发的词可以填在这里
+last_check = {}
+timeout = datetime.timedelta(seconds=30)
+
 
 # 通过@机器人+问题触发，不需要可以注释掉
 @sv.on_message('group')
@@ -43,8 +47,14 @@ async def ai_reply(bot, ev: CQEvent):
 async def ai_reply_prefix(bot, ev: CQEvent):
     group_id = str(ev.group_id)
     if conversation_manager.is_processing(group_id):
+        if group_id in last_check:
+            intervals = datetime.datetime.now() - last_check[group_id]
+            if intervals > timeout:
+                conversation_manager.set_processing(group_id, False)
+                await bot.finish(ev, f'出了一点问题，已经帮你解锁了，请重新对话')
         await bot.send(ev, "等待回复中，请稍后再对话")
         return
+    last_check[group_id] = datetime.datetime.now()
     conversation_manager.set_processing(group_id, True)
     
     text = str(ev.message.extract_plain_text()).strip()
