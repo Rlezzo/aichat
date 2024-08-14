@@ -17,6 +17,7 @@ help_text = """1. `添加人格/设置人格+人格名+空格+设定`: 创建新
 9. `ai配置重载/重载配置`: 重新加载配置文件，手动更新配置文件后用
 10.`查询模型/模型列表` 查看api所用模型
 11.`切换模型` 切换api所用模型
+12.`解除等待回复` 处理偶尔出现的一直卡在等待回复的情况
 """
 
 sv = Service('aichat', enable_on_default=True, help_=help_text)
@@ -110,10 +111,17 @@ async def change_persona(bot, ev: CQEvent):
         conversation_manager.set_persona(group_id, "default")
         await bot.send(ev, "已重置为default人格")
         
+@sv.on_fullmatch(('解除等待回复'))
+async def reset_reply_lock(bot, ev: CQEvent):
+    group_id = str(ev.group_id)
+    conversation_manager.set_processing(group_id, False)
+    await bot.send(ev, "已解除等待回复")
+    
 @sv.on_fullmatch(('重置会话', '重置人格'))
 async def reset_conversation_prefix(bot, ev: CQEvent):
     group_id = str(ev.group_id)
     conversation_manager.reset_conversation(group_id)
+    conversation_manager.set_processing(group_id, False)
     await bot.send(ev, "会话已重置")
 
 @sv.on_fullmatch('人格列表')
