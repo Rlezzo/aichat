@@ -23,7 +23,7 @@ class ConfigManager:
         default_options = {
             "api_providers": {
                 "deepseek": {
-                    "models": ["deepseek-chat","deepseek-coder"],
+                    "models": ["deepseek-chat","deepseek-reasoner"],
                     "api_keys": ["sk-b099xxxxxx", "sk-b001xxxxxx", "sk-b092xxxxxx"],
                     "base_url": "https://api.deepseek.com"
                 },
@@ -39,8 +39,8 @@ class ConfigManager:
                 "proxy": "http://127.0.0.1:7890",
                 "proxy_on": False,
                 "max_tokens": 512,
-                "temperature": 1.0,
-                "timeout": 30
+                "temperature": 1.3,
+                "timeout": 60
             }
         }
         self._save_json(file_path, default_options)
