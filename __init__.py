@@ -252,6 +252,7 @@ async def switch_model(bot, ev: CQEvent):
     else:
         config['model'] = model_name
         config_manager.set_config(group_id, config)
+        config_manager.reload_config()
         await bot.send(ev, f"模型已切换为：{model_name}")
 
 @sv.on_prefix('切换温度')
