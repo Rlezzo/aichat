@@ -64,22 +64,25 @@ class ConversationManager:
         if not record:
             return
         messages = self.get_messages(group_id)
+
         messages.append({"role": role, "content": content})
-        # 清理过多的消息
-        if len(messages) > self.max_messages:
-            messages.pop(1)
         
-        # 清理超出token限制的消息
+        # 清理过多的消息（按组删除）
+        if len(messages) > self.max_messages:
+            del messages[1:3]  # 删除最早的一组对话，跳过系统消息
+        
+        # 清理超出 token 限制的消息（按组删除）
         total_tokens = sum(len(msg['content']) for msg in messages)
         while total_tokens > self.max_tokens:
-            messages.pop(1)
+            if len(messages) > 2:  # 确保至少保留系统消息
+                del messages[1:3]  # 删除最早的一组对话
             total_tokens = sum(len(msg['content']) for msg in messages)
-        
-        # 增加计数器，每次添加消息后可能触发批量保存
-        self.save_counter += 1
-        if self.save_counter >= self.save_threshold:
-            self.save_counter = 0
-            asyncio.create_task(self.save_group_conversations())
+            
+            # 增加计数器，每次添加消息后可能触发批量保存
+            self.save_counter += 1
+            if self.save_counter >= self.save_threshold:
+                self.save_counter = 0
+                asyncio.create_task(self.save_group_conversations())
 
     def set_persona(self, group_id, persona):
         self.group_conversations[group_id] = {
