@@ -5,7 +5,6 @@ from nonebot.message import Message
 from .conversation_manager import ConversationManager
 from .config_manager import ConfigManager
 from .client_manager import ClientManager
-import datetime
 
 help_text = """1. `添加人格/设置人格+人格名+空格+设定`: 创建新人格或修改现有人格，注意人格名不能大于24位
 2. `人格列表`: 获取当前所有人格及当前人格
@@ -18,7 +17,7 @@ help_text = """1. `添加人格/设置人格+人格名+空格+设定`: 创建新
 9. `ai配置重载/重载配置`: 重新加载配置文件，手动更新配置文件后用
 10.`查询模型/模型列表` 查看api所用模型
 11.`切换模型` 切换api所用模型
-12.`解除等待回复` 处理偶尔出现的一直卡在等待回复的情况
+12.`解除等待回复` 应该不会再卡住了，以防万一还是先保留
 """
 
 sv = Service('aichat', enable_on_default=True, help_=help_text)
@@ -29,9 +28,6 @@ config_manager = ConfigManager()
 client_manager = ClientManager()
 
 black_word = ['今天我是什么少女', 'ba来一井']  # 如果有不想触发的词可以填在这里
-last_check = {}
-timeout = datetime.timedelta(seconds=30)
-
 
 # 通过@机器人+问题触发，不需要可以注释掉
 @sv.on_message('group')
@@ -43,22 +39,17 @@ async def ai_reply(bot, ev: CQEvent):
         await ai_reply_prefix(bot, ev)
 
 # 测试对话+问题，和AI聊天
-@sv.on_prefix('/t')
+@sv.on_prefix(('ai', 'AI', 'Ai', 'aI'))
 async def ai_reply_prefix(bot, ev: CQEvent):
     group_id = str(ev.group_id)
     if conversation_manager.is_processing(group_id):
-        if group_id in last_check:
-            intervals = datetime.datetime.now() - last_check[group_id]
-            if intervals > timeout:
-                conversation_manager.set_processing(group_id, False)
-                await bot.finish(ev, f'出了一点问题，已经帮你解锁了，请重新对话')
         await bot.send(ev, "等待回复中，请稍后再对话")
         return
-    last_check[group_id] = datetime.datetime.now()
     conversation_manager.set_processing(group_id, True)
     
     text = str(ev.message.extract_plain_text()).strip()
     if text == '' or text in black_word:
+        conversation_manager.set_processing(group_id, False)  # 提前释放锁
         return
     try:
         config = config_manager.get_config(group_id)
@@ -69,20 +60,29 @@ async def ai_reply_prefix(bot, ev: CQEvent):
 
         msg = await get_chat_response(group_id, text, config)
         if msg:
-            await bot.send(ev, msg)
+            await bot.send(ev, msg, at_sender=True)
     except Exception as err:
         logger.error(f"Error during AI response: {err}")
-        await bot.send(ev, f"发生错误: {err}")
+        await bot.send(ev, f"发生未捕获错误: {str(err)[:100]}")  # 避免过长错误
     finally:
         conversation_manager.set_processing(group_id, False)
 
 async def get_chat_response(group_id, text, config):
+    error_mapping = {
+        400: "格式错误。原因：请求体格式错误。解决方法：请根据错误信息提示修改请求体",
+        401: "认证失败。原因：API key 错误，认证失败。解决方法：请检查API key是否正确，如没有请先创建",
+        402: "余额不足。原因：账号余额不足。解决方法：请确认余额并前往充值页面充值",
+        422: "参数错误。原因：请求体参数错误。解决方法：请根据提示修改参数",
+        429: "请求速率达到上限。原因：请求速率（TPM/RPM）达到上限。解决方法：请合理规划请求速率",
+        500: "服务器故障。原因：服务器内部故障。解决方法：请稍后重试或联系支持",
+        503: "服务器繁忙。原因：服务器负载过高。解决方法：请稍后重试",
+    }
     record = config.get("record", True)
     messages = conversation_manager.get_messages(group_id, record)
     
     # 将用户的问题临时添加到消息中
     messages.append({"role": "user", "content": text})
-    
+    # logger.info(f"{group_id}: {messages}")
     # 获取同配置的客户端
     client = client_manager.get_client(config)
     try:
@@ -97,15 +97,27 @@ async def get_chat_response(group_id, text, config):
         reply = response.choices[0].message.content.strip()
         if record:
             # 开启记忆就保存一对对话
-            messages.pop() # 避免重复添加用户消息
+            messages.pop()
             conversation_manager.add_message(group_id, "user", text)
             conversation_manager.add_message(group_id, "assistant", reply)
+
         return reply
     except Exception as e:
         messages.pop()
         logger.error(f"Error in get_chat_response: {e}")
-        err = str(e) if len(str(e)) < 133 else str(e)[:133]
-        return f"发生错误: {err}"
+        # 提取状态码
+        status_code = getattr(e, 'status_code', None)
+        if status_code is None and hasattr(e, 'response'):
+            status_code = getattr(e.response, 'status_code', None)
+        
+        # 匹配预定义错误信息
+        if status_code in error_mapping:
+            return f"错误码 {status_code}: {error_mapping[status_code]}"
+        else:
+            # 其他错误截断处理
+            err_msg = str(e)
+            truncated_err = err_msg if len(err_msg) < 133 else f"{err_msg[:130]}..."
+            return f"发生未定义错误: {truncated_err}"
 
 @sv.on_prefix('切换人格')
 async def change_persona(bot, ev: CQEvent):
