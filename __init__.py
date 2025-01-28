@@ -203,6 +203,7 @@ async def set_record(bot, ev: CQEvent):
         await bot.send(ev, f"本群的对话记忆已关闭")
     else:
         await bot.send(ev, "用法：对话记忆 开启/关闭 或 开/关 或 on/off 或 启用/禁用")
+    config_manager.reload_config()
 
 @sv.on_fullmatch(('查询模型', '模型列表'))
 async def query_models(bot, ev: CQEvent):
@@ -241,6 +242,61 @@ async def switch_model(bot, ev: CQEvent):
         config_manager.set_config(group_id, config)
         await bot.send(ev, f"模型已切换为：{model_name}")
 
+@sv.on_prefix('切换温度')
+async def switch_temperature(bot, ev: CQEvent):
+    group_id = str(ev.group_id)
+    input_text = ev.message.extract_plain_text().strip()
+    
+    # 带场景关键词的配置
+    temp_settings = [
+        {
+            "value": 0.0,
+            "desc": "代码生成/数学解题",
+            "keywords": ["代码", "数学", "编程"]
+        },
+        {
+            "value": 1.0,
+            "desc": "数据工作",
+            "keywords": ["数据", "分析", "抽取", "表格"]
+        },
+        {
+            "value": 1.3,
+            "desc": "日常交流",
+            "keywords": ["通用", "聊天", "对话", "翻译"]
+        },
+        {
+            "value": 1.5,
+            "desc": "创意创作",
+            "keywords": ["创意", "写作", "诗歌", "小说", "故事"]
+        }
+    ]
+
+    # 关键词匹配（包含部分匹配）
+    matched = None
+    for setting in temp_settings:
+        if any(kw in input_text for kw in setting["keywords"]):
+            matched = setting
+            break
+    if matched:
+        # 更新配置
+        config = config_manager.get_config(group_id)
+        config['temperature'] = matched["value"]
+        config_manager.set_config(group_id, config)
+        config_manager.reload_config()
+        
+        # 找到具体匹配的关键词
+        matched_keyword = next(kw for kw in matched["keywords"] if kw in input_text)
+        await bot.send(ev, f"识别到「{matched_keyword}」模式，已切换至：{matched['desc']}（温度值 {matched['value']}）")
+    else:
+        # 生成帮助提示
+        help_msg = ["请指定要切换的模式关键词："]
+        help_msg += [ 
+            f"• {'/'.join(setting['keywords'])} → {setting['desc']}（温度 {setting['value']}）" 
+            for setting in temp_settings
+        ]
+        help_msg.append("示例：切换温度 写诗")
+        await bot.send(ev, "\n".join(help_msg))
+        
 @sv.on_fullmatch(('重载配置','ai配置重载'))
 async def reload_config(bot, ev: CQEvent):
     config_manager.reload_config()
